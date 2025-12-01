@@ -1,17 +1,29 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS  
-import requests, random,os
+import requests
+import random
+import os
 
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app)
+
+session = requests.Session()
+
+
+
 
 def fetch_quote():
+    url = "https://zenquotes.io/api/random"
+
+
     try:
-        res = requests.get("https://zenquotes.io/api/random", timeout=5)
+        res = session.get(url, timeout=5)
         data = res.json()
         return {"quote": data[0]["q"], "author": data[0]["a"]}
-    except:
+    except Exception: 
+
+
         fallback = [
             {"quote": "Selv den viseste kan lære mer.", "author": "Ukjent"},
             {"quote": "Stillhet er en kilde til styrke.", "author": "Lao Tzu"},
@@ -22,30 +34,55 @@ def fetch_quote():
 def quote():
     return jsonify(fetch_quote())
 
+
+
+
+def translate_text(text, target_lang):
+    try:
+        url = "https://api.mymemory.translated.net/get"
+        params = {
+            "q": text,
+            "langpair": f"en|{target_lang}"
+        }
+
+
+        res = session.get(url, params=params, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+
+
+        return data["responseData"]["translatedText"]
+    
+
+    except Exception:
+        return None
+
+
+
 @app.route("/translate", methods=["POST"])
 def translate():
-    data = request.json
+    data = request.json or {}
     quote_text = data.get("quote")
-    target_lang = data.get("lang", "en")
+    target_lang = data.get("lang", "no")
 
     if not quote_text:
         return jsonify({"error": "No quote provided"}), 400
 
-    try:
-        response = requests.post(
-            "https://libretranslate.com/translate",
-            json={
-                "q": quote_text,
-                "source": "en",
-                "target": target_lang
-            },
-            timeout=5
-        )
-        translated = response.json()["translatedText"]
-        return jsonify({"translated": translated})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+   
+    translated = translate_text(quote_text, target_lang)
 
+
+    if translated is None: 
+       return jsonify({
+           "success": False,
+           "translated": None,
+           "message": "Translation API failed"
+       })
+
+    return jsonify({
+        "success": True,
+        "translated": translated
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
